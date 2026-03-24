@@ -135,7 +135,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   // Removed payment status from main view per request
   { id: "collectedByUserName", label: "User Name", visible: false },
   { id: "collectedByEmployeeId", label: "Employee ID", visible: false },
-  { id: "discountRowLevel", label: "Discount (Row Level)", visible: false },
+  { id: "discountRowLevel", label: "Discount (Item Level)", visible: false },
   { id: "discountBillLevel", label: "Discount (Bill Level)", visible: false },
 ];
 
@@ -172,7 +172,7 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { label: "OP Consultation Charge", value: (record) => record.opConsultationCharge },
   { label: "OP Consultation Charge Tax", value: (record) => record.opConsultationChargeTax },
   { label: "Transaction ID", value: (record) => record.transactionId },
-  { label: "Discount (Row Level)", value: (record) => record.discountRowLevel },
+  { label: "Discount (Item Level)", value: (record) => record.discountRowLevel },
   { label: "Discount (Bill Level)", value: (record) => record.discountBillLevel },
 ];
 

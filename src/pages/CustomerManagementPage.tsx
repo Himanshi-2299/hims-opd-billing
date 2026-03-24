@@ -25,8 +25,14 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from "../app/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../app/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,6 +79,8 @@ type User = {
   lastModifiedAt: string;
 };
 
+type UhidLetterKind = "numeric" | "alphanumeric" | "both";
+
 type Sequence = {
   id: string;
   facilityName: string;
@@ -83,7 +91,101 @@ type Sequence = {
   status: "configured" | "inactive";
   configuredDate: string;
   configuredTime: string;
+  uhidUseDefault?: boolean;
+  uhidIncludeDate?: boolean;
+  uhidIncludeLetters?: boolean;
+  uhidLetterKind?: UhidLetterKind;
+  uhidLetterCount?: number;
+  uhidIncludePrefix?: boolean;
+  uhidPrefix?: string;
+  uhidIncludeTenantId?: boolean;
+  uhidTenantIdSegment?: string;
 };
+
+function defaultUhidFormatString(tenantId: string): string {
+  return `YYMMDD${tenantId}XXXXXXX`;
+}
+
+function buildUhidCustomPreview(params: {
+  includeDate: boolean;
+  includeLetters: boolean;
+  letterKind: UhidLetterKind;
+  letterCount: number;
+  includePrefix: boolean;
+  prefix: string;
+  includeTenantId: boolean;
+  tenantIdSegment: string;
+}): string {
+  const parts: string[] = [];
+  if (params.includePrefix && params.prefix.trim()) {
+    parts.push(params.prefix.trim());
+  }
+  if (params.includeDate) {
+    parts.push("YYMMDD");
+  }
+  if (params.includeTenantId && params.tenantIdSegment.trim()) {
+    parts.push(params.tenantIdSegment.trim());
+  }
+  if (params.includeLetters && params.letterCount > 0) {
+    const n = Math.min(Math.max(1, Math.floor(params.letterCount)), 32);
+    const placeholder =
+      params.letterKind === "numeric"
+        ? "X".repeat(n)
+        : params.letterKind === "alphanumeric"
+          ? "A".repeat(n)
+          : "*".repeat(n);
+    parts.push(placeholder);
+  }
+  return parts.length > 0 ? parts.join("-") : "";
+}
+
+function buildUhidExampleString(params: {
+  useDefault: boolean;
+  tenantId: string;
+  includeDate: boolean;
+  includeLetters: boolean;
+  letterKind: UhidLetterKind;
+  letterCount: number;
+  includePrefix: boolean;
+  prefix: string;
+  includeTenantId: boolean;
+  tenantIdSegment: string;
+}): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const ymd = `${yy}${mm}${dd}`;
+  const tenant = String(params.tenantId || "").padStart(5, "0");
+
+  if (params.useDefault) {
+    return `${ymd}${tenant}0000001`;
+  }
+
+  const parts: string[] = [];
+  if (params.includePrefix && params.prefix.trim()) {
+    parts.push(params.prefix.trim());
+  }
+  if (params.includeDate) {
+    parts.push(ymd);
+  }
+  if (params.includeTenantId && params.tenantIdSegment.trim()) {
+    parts.push(params.tenantIdSegment.trim());
+  }
+  if (params.includeLetters && params.letterCount > 0) {
+    const n = Math.min(Math.max(1, Math.floor(params.letterCount)), 32);
+    let seq = "";
+    if (params.letterKind === "numeric") {
+      seq = "1".padStart(n, "0");
+    } else if (params.letterKind === "alphanumeric") {
+      seq = ("A1".repeat(Math.ceil(n / 2))).slice(0, n);
+    } else {
+      seq = ("A1".repeat(Math.ceil(n / 2))).slice(0, n);
+    }
+    parts.push(seq);
+  }
+  return parts.length > 0 ? parts.join("-") : "—";
+}
 
 const FACILITIES: Facility[] = [
   {
@@ -382,7 +484,15 @@ export function CustomerManagementPage() {
   const [sequenceFormData, setSequenceFormData] = React.useState({
     facilityName: "",
     tenantId: "",
-    uhidFormat: "",
+    uhidUseDefault: true,
+    uhidIncludeDate: false,
+    uhidIncludeLetters: false,
+    uhidLetterKind: "numeric" as UhidLetterKind,
+    uhidLetterCount: 7,
+    uhidIncludePrefix: false,
+    uhidPrefix: "",
+    uhidIncludeTenantId: false,
+    uhidTenantIdSegment: "",
     billNoPrefix: "",
     billNoFormat: "",
     visitConfigs: [
@@ -879,7 +989,15 @@ export function CustomerManagementPage() {
                 setSequenceFormData({
                   facilityName: sequence.facilityName,
                   tenantId: sequence.tenantId,
-                  uhidFormat: `YYMMDD${sequence.tenantId}XXXXXXX`,
+                  uhidUseDefault: sequence.uhidUseDefault ?? true,
+                  uhidIncludeDate: sequence.uhidIncludeDate ?? false,
+                  uhidIncludeLetters: sequence.uhidIncludeLetters ?? false,
+                  uhidLetterKind: sequence.uhidLetterKind ?? "numeric",
+                  uhidLetterCount: sequence.uhidLetterCount ?? 7,
+                  uhidIncludePrefix: sequence.uhidIncludePrefix ?? false,
+                  uhidPrefix: sequence.uhidPrefix ?? "",
+                  uhidIncludeTenantId: sequence.uhidIncludeTenantId ?? false,
+                  uhidTenantIdSegment: sequence.uhidTenantIdSegment ?? sequence.tenantId,
                   billNoPrefix: /^[A-Z]{3}/.test(sequence.outpatientPrefix || "")
                     ? sequence.outpatientPrefix
                     : "BIL",
@@ -1310,35 +1428,241 @@ export function CustomerManagementPage() {
 
               {/* UHID Configuration */}
               <div className="space-y-4">
-                <h3 className="font-medium" style={{ fontSize: "var(--text-base)" }}>
-                  Unique Health ID (UHID) Configuration
-                </h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="uhidFormat" style={{ fontSize: "var(--text-base)" }}>
-                    UHID Format
-                  </Label>
-                  <Input
-                    id="uhidFormat"
-                    value={sequenceFormData.uhidFormat}
-                    readOnly
-                    className="bg-muted text-muted-foreground font-mono max-w-[calc(50%-0.5rem)]"
-                    style={{ fontSize: "var(--text-base)" }}
-                  />
-                  {(() => {
-                    const now = new Date();
-                    const yy = String(now.getFullYear()).slice(-2);
-                    const mm = String(now.getMonth() + 1).padStart(2, "0");
-                    const dd = String(now.getDate()).padStart(2, "0");
-                    const tenant = String(sequenceFormData.tenantId || "").padStart(5, "0");
-                    const example = `${yy}${mm}${dd}-${tenant}-0000001`;
-                    return (
-                      <p className="text-muted-foreground" style={{ fontSize: "var(--text-sm)" }}>
-                        e.g., {example}
-                      </p>
-                    );
-                  })()}
+                <div className="space-y-3">
+                  <h3 className="font-medium" style={{ fontSize: "var(--text-base)" }}>
+                    Unique Health ID (UHID) Configuration
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="uhid-default-toggle"
+                      checked={sequenceFormData.uhidUseDefault}
+                      onCheckedChange={(checked) => {
+                        setSequenceFormData((prev) => ({
+                          ...prev,
+                          uhidUseDefault: checked,
+                          ...(checked
+                            ? {}
+                            : {
+                                uhidTenantIdSegment:
+                                  prev.uhidTenantIdSegment.trim() || prev.tenantId,
+                              }),
+                        }));
+                      }}
+                    />
+                    <Label
+                      htmlFor="uhid-default-toggle"
+                      className="cursor-pointer font-normal text-foreground"
+                      style={{ fontSize: "var(--text-sm)" }}
+                    >
+                      Default UHID
+                    </Label>
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2 min-w-0">
+                    <Label htmlFor="uhidFormatDisplay" style={{ fontSize: "var(--text-base)" }}>
+                      UHID format pattern
+                    </Label>
+                    <Input
+                      id="uhidFormatDisplay"
+                      value={
+                        sequenceFormData.uhidUseDefault
+                          ? defaultUhidFormatString(sequenceFormData.tenantId)
+                          : buildUhidCustomPreview({
+                              includeDate: sequenceFormData.uhidIncludeDate,
+                              includeLetters: sequenceFormData.uhidIncludeLetters,
+                              letterKind: sequenceFormData.uhidLetterKind,
+                              letterCount: sequenceFormData.uhidLetterCount,
+                              includePrefix: sequenceFormData.uhidIncludePrefix,
+                              prefix: sequenceFormData.uhidPrefix,
+                              includeTenantId: sequenceFormData.uhidIncludeTenantId,
+                              tenantIdSegment: sequenceFormData.uhidTenantIdSegment,
+                            }) || "—"
+                      }
+                      readOnly
+                      className="w-full bg-muted text-muted-foreground font-mono border border-border"
+                      style={{ fontSize: "var(--text-base)" }}
+                    />
+                    <p className="text-muted-foreground" style={{ fontSize: "var(--text-sm)" }}>
+                      e.g.,{" "}
+                      {buildUhidExampleString({
+                        useDefault: sequenceFormData.uhidUseDefault,
+                        tenantId: sequenceFormData.tenantId,
+                        includeDate: sequenceFormData.uhidIncludeDate,
+                        includeLetters: sequenceFormData.uhidIncludeLetters,
+                        letterKind: sequenceFormData.uhidLetterKind,
+                        letterCount: sequenceFormData.uhidLetterCount,
+                        includePrefix: sequenceFormData.uhidIncludePrefix,
+                        prefix: sequenceFormData.uhidPrefix,
+                        includeTenantId: sequenceFormData.uhidIncludeTenantId,
+                        tenantIdSegment: sequenceFormData.uhidTenantIdSegment,
+                      })}
+                    </p>
+                  </div>
+                </div>
+
+                {!sequenceFormData.uhidUseDefault && (
+                  <div className="rounded-md border border-border p-4 space-y-4 bg-muted/30">
+                    <p className="text-muted-foreground" style={{ fontSize: "var(--text-sm)" }}>
+                      Choose which parts to include in the UHID and fill in the values below.
+                    </p>
+
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="uhid-opt-date"
+                        checked={sequenceFormData.uhidIncludeDate}
+                        onCheckedChange={(checked) =>
+                          setSequenceFormData((prev) => ({
+                            ...prev,
+                            uhidIncludeDate: checked === true,
+                          }))
+                        }
+                      />
+                      <div className="space-y-1 flex-1">
+                        <Label htmlFor="uhid-opt-date" className="cursor-pointer" style={{ fontSize: "var(--text-base)" }}>
+                          Date
+                        </Label>
+                        <p className="text-muted-foreground" style={{ fontSize: "var(--text-sm)" }}>
+                          Adds a <span className="font-mono">YYMMDD</span> segment (year, month, day).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="uhid-opt-letters"
+                        checked={sequenceFormData.uhidIncludeLetters}
+                        onCheckedChange={(checked) =>
+                          setSequenceFormData((prev) => ({
+                            ...prev,
+                            uhidIncludeLetters: checked === true,
+                          }))
+                        }
+                      />
+                      <div className="space-y-3 flex-1 min-w-0">
+                        <Label htmlFor="uhid-opt-letters" className="cursor-pointer" style={{ fontSize: "var(--text-base)" }}>
+                          Allowed characters
+                        </Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label style={{ fontSize: "var(--text-sm)" }}>Character type</Label>
+                            <Select
+                              value={sequenceFormData.uhidLetterKind}
+                              onValueChange={(v: UhidLetterKind) =>
+                                setSequenceFormData((prev) => ({ ...prev, uhidLetterKind: v }))
+                              }
+                              disabled={!sequenceFormData.uhidIncludeLetters}
+                            >
+                              <SelectTrigger className="border border-border" style={{ fontSize: "var(--text-base)" }}>
+                                <SelectValue placeholder="Type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="numeric">Numeric</SelectItem>
+                                <SelectItem value="alphanumeric">Alphanumeric</SelectItem>
+                                <SelectItem value="both">Both (mixed)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="uhid-letter-count" style={{ fontSize: "var(--text-sm)" }}>
+                              Count
+                            </Label>
+                            <Input
+                              id="uhid-letter-count"
+                              type="number"
+                              min={1}
+                              max={32}
+                              value={sequenceFormData.uhidLetterCount}
+                              disabled={!sequenceFormData.uhidIncludeLetters}
+                              onChange={(e) => {
+                                const raw = parseInt(e.target.value, 10);
+                                const n = Number.isFinite(raw) ? Math.min(32, Math.max(1, raw)) : 1;
+                                setSequenceFormData((prev) => ({ ...prev, uhidLetterCount: n }));
+                              }}
+                              className="border border-border font-mono"
+                              style={{ fontSize: "var(--text-base)" }}
+                            />
+                          </div>
+                        </div>
+                        <p className="text-muted-foreground" style={{ fontSize: "var(--text-xs)" }}>
+                          Pattern uses{" "}
+                          <span className="font-mono">X</span> for numeric,{" "}
+                          <span className="font-mono">A</span> for alphanumeric,{" "}
+                          <span className="font-mono">*</span> for mixed.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="uhid-opt-prefix"
+                        checked={sequenceFormData.uhidIncludePrefix}
+                        onCheckedChange={(checked) =>
+                          setSequenceFormData((prev) => ({
+                            ...prev,
+                            uhidIncludePrefix: checked === true,
+                          }))
+                        }
+                      />
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <Label htmlFor="uhid-prefix-input" className="cursor-pointer" style={{ fontSize: "var(--text-base)" }}>
+                          Prefix
+                        </Label>
+                        <Input
+                          id="uhid-prefix-input"
+                          value={sequenceFormData.uhidPrefix}
+                          disabled={!sequenceFormData.uhidIncludePrefix}
+                          onChange={(e) =>
+                            setSequenceFormData((prev) => ({
+                              ...prev,
+                              uhidPrefix: e.target.value.slice(0, 24),
+                            }))
+                          }
+                          placeholder="e.g., HIMS"
+                          className="border border-border font-mono max-w-md"
+                          style={{ fontSize: "var(--text-base)" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="uhid-opt-tenant"
+                        checked={sequenceFormData.uhidIncludeTenantId}
+                        onCheckedChange={(checked) =>
+                          setSequenceFormData((prev) => ({
+                            ...prev,
+                            uhidIncludeTenantId: checked === true,
+                            uhidTenantIdSegment:
+                              checked === true && !prev.uhidTenantIdSegment.trim()
+                                ? prev.tenantId
+                                : prev.uhidTenantIdSegment,
+                          }))
+                        }
+                      />
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <Label htmlFor="uhid-tenant-segment" className="cursor-pointer" style={{ fontSize: "var(--text-base)" }}>
+                          Tenant ID
+                        </Label>
+                        <Input
+                          id="uhid-tenant-segment"
+                          value={sequenceFormData.uhidTenantIdSegment}
+                          disabled={!sequenceFormData.uhidIncludeTenantId}
+                          onChange={(e) =>
+                            setSequenceFormData((prev) => ({
+                              ...prev,
+                              uhidTenantIdSegment: e.target.value.slice(0, 32),
+                            }))
+                          }
+                          placeholder="Tenant identifier in UHID"
+                          className="border border-border font-mono max-w-md"
+                          style={{ fontSize: "var(--text-base)" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bill No Configuration */}
@@ -1491,6 +1815,15 @@ export function CustomerManagementPage() {
                           ? {
                               ...seq,
                               tenantId: sequenceFormData.tenantId,
+                              uhidUseDefault: sequenceFormData.uhidUseDefault,
+                              uhidIncludeDate: sequenceFormData.uhidIncludeDate,
+                              uhidIncludeLetters: sequenceFormData.uhidIncludeLetters,
+                              uhidLetterKind: sequenceFormData.uhidLetterKind,
+                              uhidLetterCount: sequenceFormData.uhidLetterCount,
+                              uhidIncludePrefix: sequenceFormData.uhidIncludePrefix,
+                              uhidPrefix: sequenceFormData.uhidPrefix,
+                              uhidIncludeTenantId: sequenceFormData.uhidIncludeTenantId,
+                              uhidTenantIdSegment: sequenceFormData.uhidTenantIdSegment,
                               outpatientPrefix: sequenceFormData.visitConfigs[0].active
                                 ? sequenceFormData.visitConfigs[0].prefix
                                 : "",

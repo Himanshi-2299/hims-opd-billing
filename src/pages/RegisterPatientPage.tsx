@@ -390,6 +390,14 @@ export function RegisterPatientPage() {
       }, 0),
     [billingRows]
   );
+  const totalGstAmount = React.useMemo(
+    () =>
+      billingRows.reduce((sum, row) => {
+        const taxable = row.quantity * row.unitPrice;
+        return sum + Math.round((taxable * row.gstPercent) / 100);
+      }, 0),
+    [billingRows]
+  );
   const discountAmount = React.useMemo(
     () => billingRows.reduce((sum, row) => sum + row.discount, 0),
     [billingRows]
@@ -1515,7 +1523,7 @@ export function RegisterPatientPage() {
                   <span className="font-mono">Rs {totalBilledAmount}</span>
                 </div>
                 <div className="flex items-center justify-between" style={{ fontSize: "var(--text-sm)" }}>
-                  <span className="text-muted-foreground">Discount Amount (Row Level)</span>
+                  <span className="text-muted-foreground">Item Level Discount</span>
                   <span className="font-mono">Rs {discountAmount}</span>
                 </div>
                 <div className="flex items-center justify-between" style={{ fontSize: "var(--text-sm)" }}>
@@ -1528,6 +1536,10 @@ export function RegisterPatientPage() {
                       className="h-9 w-32 text-right font-mono border border-border bg-input-background"
                     />
                   </div>
+                </div>
+                <div className="flex items-center justify-between" style={{ fontSize: "var(--text-sm)" }}>
+                  <span className="text-muted-foreground">GST Amount</span>
+                  <span className="font-mono">Rs {totalGstAmount}</span>
                 </div>
                 <div className="flex items-center justify-between" style={{ fontSize: "var(--text-sm)" }}>
                   <span className="text-muted-foreground">Final Amount</span>
