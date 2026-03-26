@@ -481,6 +481,7 @@ export function CustomerManagementPage() {
   // Edit Sequence Modal State
   const [editSequenceModalOpen, setEditSequenceModalOpen] = React.useState(false);
   const [editingSequence, setEditingSequence] = React.useState<Sequence | null>(null);
+  const [uhidPrefixError, setUhidPrefixError] = React.useState("");
   const [sequenceFormData, setSequenceFormData] = React.useState({
     facilityName: "",
     tenantId: "",
@@ -986,6 +987,7 @@ export function CustomerManagementPage() {
               className="size-8 relative z-20"
               onClick={() => {
                 setEditingSequence(sequence);
+                setUhidPrefixError("");
                 setSequenceFormData({
                   facilityName: sequence.facilityName,
                   tenantId: sequence.tenantId,
@@ -1437,6 +1439,7 @@ export function CustomerManagementPage() {
                       id="uhid-default-toggle"
                       checked={sequenceFormData.uhidUseDefault}
                       onCheckedChange={(checked) => {
+                        setUhidPrefixError("");
                         setSequenceFormData((prev) => ({
                           ...prev,
                           uhidUseDefault: checked,
@@ -1599,10 +1602,16 @@ export function CustomerManagementPage() {
                         id="uhid-opt-prefix"
                         checked={sequenceFormData.uhidIncludePrefix}
                         onCheckedChange={(checked) =>
-                          setSequenceFormData((prev) => ({
-                            ...prev,
-                            uhidIncludePrefix: checked === true,
-                          }))
+                          setSequenceFormData((prev) => {
+                            const enabled = checked === true;
+                            if (!enabled) {
+                              setUhidPrefixError("");
+                            }
+                            return {
+                              ...prev,
+                              uhidIncludePrefix: enabled,
+                            };
+                          })
                         }
                       />
                       <div className="space-y-2 flex-1 min-w-0">
@@ -1613,16 +1622,29 @@ export function CustomerManagementPage() {
                           id="uhid-prefix-input"
                           value={sequenceFormData.uhidPrefix}
                           disabled={!sequenceFormData.uhidIncludePrefix}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/[^A-Z]/gi, "").toUpperCase();
+                            const exceeded = cleaned.length > 3;
+                            setUhidPrefixError(exceeded ? "Prefix cannot exceed 3 uppercase letters." : "");
                             setSequenceFormData((prev) => ({
                               ...prev,
-                              uhidPrefix: e.target.value.slice(0, 24),
-                            }))
-                          }
-                          placeholder="e.g., HIMS"
+                              uhidPrefix: cleaned.slice(0, 3),
+                            }));
+                          }}
+                          placeholder="e.g., HSP"
                           className="border border-border font-mono max-w-md"
                           style={{ fontSize: "var(--text-base)" }}
                         />
+                        {sequenceFormData.uhidIncludePrefix && uhidPrefixError && (
+                          <p className="text-destructive" style={{ fontSize: "var(--text-xs)" }}>
+                            {uhidPrefixError}
+                          </p>
+                        )}
+                        {sequenceFormData.uhidIncludePrefix && !uhidPrefixError && (
+                          <p className="text-muted-foreground" style={{ fontSize: "var(--text-xs)" }}>
+                            Use exactly 3 uppercase letters.
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1800,6 +1822,7 @@ export function CustomerManagementPage() {
                 onClick={() => {
                   setEditSequenceModalOpen(false);
                   setEditingSequence(null);
+                  setUhidPrefixError("");
                 }}
                 style={{ fontSize: "var(--text-base)" }}
               >
@@ -1840,10 +1863,14 @@ export function CustomerManagementPage() {
                     toast.success("Sequence configuration updated successfully");
                     setEditSequenceModalOpen(false);
                     setEditingSequence(null);
+                    setUhidPrefixError("");
                   }
                 }}
                 disabled={
-                  !sequenceFormData.visitConfigs.some(config => config.active && config.prefix.length === 2)
+                  !sequenceFormData.visitConfigs.some(config => config.active && config.prefix.length === 2) ||
+                  (!sequenceFormData.uhidUseDefault &&
+                    sequenceFormData.uhidIncludePrefix &&
+                    sequenceFormData.uhidPrefix.length !== 3)
                 }
                 style={{ fontSize: "var(--text-base)" }}
               >
